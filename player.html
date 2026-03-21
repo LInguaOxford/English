@@ -77,6 +77,8 @@ function init(){
     document.title=decoded.title||'단어 듣기';
     document.getElementById('subt').textContent=decoded.title?'단어 받아쓰기':'';
     W=decoded.words||[];
+    window._gkey=decoded.gkey||null;
+    window._voiceName=decoded.voiceName||'en-US-Neural2-D';
     if(!W.length)throw new Error('단어가 없습니다.');
     document.getElementById('cnt').textContent=`${W.length}개 단어`;
     document.getElementById('num').textContent='—';
@@ -96,16 +98,46 @@ function loadVoices(){
   if(!vcs.length)setTimeout(loadVoices,500);
 }
 
-function spk(t){
+async function spkGoogle(text, rate){
+  const key=window._gkey;
+  if(!key)return false;
+  try{
+    const resp=await fetch(`https://texttospeech.googleapis.com/v1/text:synthesize?key=${key}`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        input:{text},
+        voice:{languageCode:'en-US',name:window._voiceName||'en-US-Neural2-D'},
+        audioConfig:{audioEncoding:'MP3',speakingRate:rate}
+      })
+    });
+    if(!resp.ok)return false;
+    const d=await resp.json();
+    if(!d.audioContent)return false;
+    return new Promise(res=>{
+      const audio=new Audio('data:audio/mp3;base64,'+d.audioContent);
+      audio.onended=res;audio.onerror=()=>res(false);
+      audio.play();
+    });
+  }catch(e){return false;}
+}
+
+function spkWeb(text, rate){
   return new Promise(r=>{
     speechSynthesis.cancel();
-    const u=new SpeechSynthesisUtterance(t);
+    const u=new SpeechSynthesisUtterance(text);
     if(vcs.length){u.voice=vcs[0];u.lang=vcs[0].lang;}
     else u.lang='en-US';
-    u.rate=parseFloat(document.getElementById('spsl').value);
+    u.rate=rate;
     u.onend=r;u.onerror=r;
     speechSynthesis.speak(u);
   });
+}
+
+async function spk(t){
+  const rate=parseFloat(document.getElementById('spsl').value);
+  const g=await spkGoogle(t,rate);
+  if(g===false)await spkWeb(t,rate);
 }
 function slp(ms){return new Promise(r=>{pt=setTimeout(r,ms);});}
 
