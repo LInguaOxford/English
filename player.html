@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>단어 듣기</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Malgun Gothic',sans-serif;background:#f5f4f0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1rem}
+.card{background:#fff;border-radius:16px;padding:2rem 1.5rem;max-width:400px;width:100%;box-shadow:0 2px 16px rgba(0,0,0,.08)}
+.title{font-size:17px;font-weight:600;color:#111;margin-bottom:.25rem;text-align:center}
+.sub{font-size:12px;color:#999;text-align:center;margin-bottom:1.5rem}
+.num{font-size:52px;font-weight:700;font-family:monospace;color:#EF9F27;text-align:center;min-height:72px;display:flex;align-items:center;justify-content:center}
+.info{font-size:12px;color:#aaa;text-align:center;margin:.5rem 0 1.25rem;min-height:18px}
+.pg-wrap{height:4px;background:#eee;border-radius:2px;margin-bottom:1.5rem;overflow:hidden}
+.pg{height:100%;background:#EF9F27;border-radius:2px;transition:width .3s}
+.ctrls{display:flex;justify-content:center;align-items:center;gap:12px;margin-bottom:1.25rem}
+.cb{width:44px;height:44px;border-radius:50%;border:1px solid #ddd;background:#fff;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;color:#444}
+.cb:hover{background:#f5f5f5}
+.cb.main{width:56px;height:56px;background:#EF9F27;border-color:#EF9F27;color:#fff;font-size:22px}
+.cb.main:hover{background:#d4870f}
+.settings{border-top:1px solid #eee;padding-top:1rem}
+.srow{display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem}
+.srow label{font-size:12px;color:#666}
+.srow .val{font-size:12px;font-weight:500;color:#111;min-width:36px;text-align:right}
+input[type=range]{width:120px;accent-color:#EF9F27}
+.err{text-align:center;padding:2rem;color:#c0392b;font-size:13px;line-height:1.8}
+.badge{display:inline-block;background:#faeeda;color:#633806;font-size:11px;padding:2px 8px;border-radius:20px;margin-bottom:1rem}
+</style>
+</head>
+<body>
+<div class="card">
+  <div id="main">
+    <div class="title" id="ttl">단어 듣기</div>
+    <div class="sub" id="subt"></div>
+    <div style="text-align:center"><span class="badge" id="cnt"></span></div>
+    <div class="num" id="num">—</div>
+    <div class="info" id="inf"></div>
+    <div class="pg-wrap"><div class="pg" id="pg" style="width:0%"></div></div>
+    <div class="ctrls">
+      <button class="cb" onclick="go(-1)">←</button>
+      <button class="cb main" id="pb" onclick="tog()">▶</button>
+      <button class="cb" onclick="stopAll()">■</button>
+      <button class="cb" onclick="go(1)">→</button>
+    </div>
+    <div class="settings">
+      <div class="srow">
+        <label>반복 횟수</label>
+        <input type="range" min="1" max="5" value="2" step="1" id="rsl" oninput="rv.textContent=this.value">
+        <span class="val" id="rv">2</span>회
+      </div>
+      <div class="srow">
+        <label>단어 간격</label>
+        <input type="range" min="0.5" max="5" value="2" step="0.5" id="isl" oninput="iv.textContent=parseFloat(this.value).toFixed(1)">
+        <span class="val" id="iv">2.0</span>초
+      </div>
+      <div class="srow">
+        <label>읽기 속도</label>
+        <input type="range" min="0.5" max="1.5" value="1" step="0.1" id="spsl" oninput="spv.textContent=parseFloat(this.value).toFixed(1)">
+        <span class="val" id="spv">1.0</span>x
+      </div>
+    </div>
+  </div>
+  <div id="err" style="display:none" class="err"></div>
+</div>
+
+<script>
+let W=[],ord=[],ci=0,playing=false,pt=null,vcs=[];
+
+function init(){
+  // URL의 hash(#) 뒤에서 단어 데이터 파싱
+  try{
+    const hash=location.hash.slice(1);
+    if(!hash)throw new Error('단어 데이터가 없습니다.\n선생님께 QR 코드를 다시 받아주세요.');
+    const bin=atob(hash);
+    const bytes=new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
+    const decoded=JSON.parse(new TextDecoder().decode(bytes));
+    document.getElementById('ttl').textContent=decoded.title||'단어 듣기';
+    document.title=decoded.title||'단어 듣기';
+    document.getElementById('subt').textContent=decoded.title?'단어 받아쓰기':'';
+    W=decoded.words||[];
+    window._gkey=decoded.gkey||null;
+    window._voiceName=decoded.voiceName||'en-US-Neural2-D';
+    // 선생님 설정 적용
+    if(decoded.rep){document.getElementById('rsl').value=decoded.rep;document.getElementById('rv').textContent=decoded.rep;}
+    if(decoded.interval){document.getElementById('isl').value=decoded.interval;document.getElementById('iv').textContent=parseFloat(decoded.interval).toFixed(1);}
+    if(decoded.speed){document.getElementById('spsl').value=decoded.speed;document.getElementById('spv').textContent=parseFloat(decoded.speed).toFixed(1);}
+    if(!W.length)throw new Error('단어가 없습니다.');
+    document.getElementById('cnt').textContent=`${W.length}개 단어`;
+    document.getElementById('num').textContent='—';
+    ord=W.map((_,i)=>i);
+  }catch(e){
+    document.getElementById('main').style.display='none';
+    document.getElementById('err').style.display='';
+    document.getElementById('err').textContent='⚠️ '+e.message;
+    return;
+  }
+  loadVoices();
+  speechSynthesis.onvoiceschanged=loadVoices;
+}
+
+function loadVoices(){
+  vcs=speechSynthesis.getVoices().filter(v=>v.lang.startsWith('en'));
+  if(!vcs.length)setTimeout(loadVoices,500);
+}
+
+let _audio=null;
+async function spkGoogle(text, rate){
+  const key=window._gkey;
+  if(!key)return false;
+  try{
+    const resp=await fetch('https://api.openai.com/v1/audio/speech',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
+      body:JSON.stringify({
+        model:'tts-1',
+        input:text,
+        voice:window._voiceName||'onyx',
+        speed:Math.min(Math.max(rate,0.25),4.0)
+      })
+    });
+    if(!resp.ok)return false;
+    const blob=await resp.blob();
+    const url=URL.createObjectURL(blob);
+    return new Promise(res=>{
+      if(!_audio)_audio=new Audio();
+      _audio.src=url;
+      _audio.onended=()=>{URL.revokeObjectURL(url);res(true);};
+      _audio.onerror=()=>{URL.revokeObjectURL(url);res(false);};
+      const p=_audio.play();
+      if(p&&typeof p.catch==='function')p.catch(()=>res(false));
+    });
+  }catch(e){return false;}
+}
+
+function spkWeb(text, rate){
+  return new Promise(r=>{
+    speechSynthesis.cancel();
+    const u=new SpeechSynthesisUtterance(text);
+    if(vcs.length){u.voice=vcs[0];u.lang=vcs[0].lang;}
+    else u.lang='en-US';
+    u.rate=rate;
+    u.onend=r;u.onerror=r;
+    speechSynthesis.speak(u);
+  });
+}
+
+async function spk(t){
+  const rate=parseFloat(document.getElementById('spsl').value);
+  const g=await spkGoogle(t,rate);
+  if(g===false)await spkWeb(t,rate);
+}
+function slp(ms){return new Promise(r=>{pt=setTimeout(r,ms);});}
+
+function updDisp(pos,r,rm){
+  document.getElementById('num').textContent=pos;
+  document.getElementById('inf').textContent=`${pos} / ${ord.length}번째   ·   ${r} / ${rm}회`;
+  document.getElementById('pg').style.width=`${((pos-1)/ord.length)*100}%`;
+}
+
+async function run(){
+  const rep=parseInt(document.getElementById('rsl').value)||2;
+  const wi=parseFloat(document.getElementById('isl').value)*1000;
+  for(let i=ci;i<ord.length;i++){
+    if(!playing)break;ci=i;
+    const widx=ord[i];
+    for(let r=1;r<=rep;r++){
+      if(!playing)break;
+      updDisp(i+1,r,rep);
+      await spk(W[widx].word);
+      if(!playing)break;
+      if(r<rep)await slp(800);
+    }
+    if(!playing)break;
+    if(i<ord.length-1)await slp(wi);
+  }
+  if(playing){
+    playing=false;
+    document.getElementById('pb').textContent='▶';
+    document.getElementById('pg').style.width='100%';
+    document.getElementById('inf').textContent='재생 완료 ✓';
+    document.getElementById('num').textContent='✓';
+    ci=0;
+  }
+}
+
+function tog(){
+  if(!W.length)return;
+  if(playing){
+    playing=false;speechSynthesis.cancel();clearTimeout(pt);
+    document.getElementById('pb').textContent='▶';
+    document.getElementById('num').textContent='—';
+  }else{
+    playing=true;document.getElementById('pb').textContent='⏸';run();
+  }
+}
+
+function stopAll(){
+  playing=false;speechSynthesis.cancel();clearTimeout(pt);
+  document.getElementById('pb').textContent='▶';
+  document.getElementById('num').textContent='—';
+  document.getElementById('inf').textContent='';
+  document.getElementById('pg').style.width='0%';
+  ci=0;
+}
+
+function go(d){
+  if(!W.length)return;
+  ci=Math.max(0,Math.min(ord.length-1,ci+d));
+  document.getElementById('num').textContent=ci+1;
+  document.getElementById('inf').textContent=`${ci+1} / ${ord.length}`;
+  if(!playing)spk(W[ord[ci]].word);
+}
+
+init();
+</script>
+</body>
+</html>
