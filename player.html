@@ -110,14 +110,16 @@ async function spkGoogle(text, rate){
   const key=window._gkey;
   if(!key)return false;
   const voiceId=window._voiceName||'21m00Tcm4TlvDq8ikWAM';
+  const cleanText=text.replace(/[^\w\s'-]/g,'').trim()||text;
   try{
     const resp=await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,{
       method:'POST',
       headers:{'Content-Type':'application/json','xi-api-key':key},
       body:JSON.stringify({
-        text,
-        model_id:'eleven_monolingual_v1',
-        voice_settings:{stability:0.5,similarity_boost:0.75,speed:rate}
+        text:cleanText,
+        model_id:'eleven_multilingual_v2',
+        voice_settings:{stability:0.5,similarity_boost:0.75},
+        speed:Math.min(Math.max(rate,0.7),1.2)
       })
     });
     if(!resp.ok)return false;
