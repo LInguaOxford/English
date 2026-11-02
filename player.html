@@ -65,7 +65,7 @@ input[type=range]{width:120px;accent-color:#EF9F27}
 </div>
 
 <script>
-let W=[],ord=[],ci=0,playing=false,pt=null,vcs=[];
+let W=[],ord=[],ci=0,playing=false,pt=null,vcs=[],runId=0;
 
 // ★ ElevenLabs API 키를 여기에 입력하세요 ★
 const ELEVENLABS_KEY = 'sk_9a07c17ef8cd9eb1f96adb742812c115f4b84afa3314d21a';
@@ -194,22 +194,24 @@ function updDisp(pos,r,rm){
 }
 
 async function run(){
+  const myId=++runId;
+  const alive=()=>playing&&runId===myId;
   const rep=parseInt(document.getElementById('rsl').value)||2;
   const wi=parseFloat(document.getElementById('isl').value)*1000;
   for(let i=ci;i<ord.length;i++){
-    if(!playing)break;ci=i;
+    if(!alive())break;ci=i;
     const widx=ord[i];
     for(let r=1;r<=rep;r++){
-      if(!playing)break;
+      if(!alive())break;
       updDisp(i+1,r,rep);
       await spk(W[widx].word);
-      if(!playing)break;
+      if(!alive())break;
       if(r<rep)await slp(800);
     }
-    if(!playing)break;
+    if(!alive())break;
     if(i<ord.length-1)await slp(wi);
   }
-  if(playing){
+  if(alive()){
     playing=false;
     document.getElementById('pb').textContent='▶';
     document.getElementById('pg').style.width='100%';
@@ -241,10 +243,18 @@ function stopAll(){
 
 function go(d){
   if(!W.length)return;
+  const wasPlaying=playing;
+  playing=false;speechSynthesis.cancel();clearTimeout(pt);
   ci=Math.max(0,Math.min(ord.length-1,ci+d));
   document.getElementById('num').textContent=ci+1;
   document.getElementById('inf').textContent=`${ci+1} / ${ord.length}`;
-  if(!playing)spk(W[ord[ci]].word);
+  if(wasPlaying){
+    playing=true;
+    document.getElementById('pb').textContent='⏸';
+    run();
+  }else{
+    spk(W[ord[ci]].word);
+  }
 }
 
 init();
