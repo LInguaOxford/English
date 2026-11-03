@@ -93,6 +93,8 @@ function init(){
       voiceId=parts[2]||'21m00Tcm4TlvDq8ikWAM';
       rep=parts[3]||'2';
       interval=parts[4]||'2';
+      window._speed=parseFloat(parts[5])||1;
+      window._ri=parseFloat(parts[6])||1;
     } else {
       const decoded=JSON.parse(decoded_bin);
       title=decoded.t||decoded.title||'단어 듣기';
@@ -100,6 +102,7 @@ function init(){
       voiceId=decoded.v||decoded.voiceName||'21m00Tcm4TlvDq8ikWAM';
       rep=decoded.r||decoded.rep||'2';
       interval=decoded.i||decoded.interval||'2';
+      window._speed=1; window._ri=1;
     }
     document.getElementById('ttl').textContent=title;
     document.title=title;
@@ -107,8 +110,14 @@ function init(){
     W=words_arr.map(word=>({word:word.trim()}));
     window._gkey=ELEVENLABS_KEY||null;
     window._voiceName=voiceId;
-    if(rep){document.getElementById('rsl').value=rep;document.getElementById('rv').textContent=rep;}
-    if(interval){document.getElementById('isl').value=interval;document.getElementById('iv').textContent=parseFloat(interval).toFixed(1);}
+    window._rep=parseInt(rep)||2;
+    window._interval=parseFloat(interval)||2;
+    document.getElementById('rsl').value=rep;
+    document.getElementById('rv').textContent=parseInt(rep)||2;
+    document.getElementById('isl').value=interval;
+    document.getElementById('iv').textContent=parseFloat(interval).toFixed(1);
+    document.getElementById('spsl').value=window._speed;
+    document.getElementById('spv').textContent=parseFloat(window._speed).toFixed(1);
     if(!W.length)throw new Error('단어가 없습니다.');
     document.getElementById('cnt').textContent=`${W.length}개 단어`;
     document.getElementById('num').textContent='—';
@@ -181,7 +190,7 @@ function spkWeb(text, rate){
 }
 
 async function spk(t){
-  const rate=parseFloat(document.getElementById('spsl').value);
+  const rate=window._speed||parseFloat(document.getElementById('spsl').value)||1;
   const g=await spkGoogle(t,rate);
   if(g===false)await spkWeb(t,rate);
 }
@@ -198,6 +207,7 @@ async function run(){
   const alive=()=>playing&&runId===myId;
   const rep=parseInt(document.getElementById('rsl').value)||2;
   const wi=parseFloat(document.getElementById('isl').value)*1000;
+  const ri=(window._ri||0.8)*1000;
   for(let i=ci;i<ord.length;i++){
     if(!alive())break;ci=i;
     const widx=ord[i];
@@ -206,7 +216,7 @@ async function run(){
       updDisp(i+1,r,rep);
       await spk(W[widx].word);
       if(!alive())break;
-      if(r<rep)await slp(800);
+      if(r<rep)await slp(ri);
     }
     if(!alive())break;
     if(i<ord.length-1)await slp(wi);
